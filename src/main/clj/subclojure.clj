@@ -5,7 +5,7 @@
             [clojure.tools.emitter.jvm.emit :as e.jvm.emit]
             [clojure.pprint :refer [pprint]]
             [clojure.tools.analyzer.passes.collect-closed-overs]))
-
+*e
 (def file
   '((ns emit-test)
 
@@ -95,7 +95,7 @@
               (.addURL (.toURL (java.io.File. (System/getProperty "user.dir"))))))
 
 (def loader-test
-  (compile (list clojure.tools.emitter.temp/bootstrap-invoke) cl))
+  (compile (list nsloader/bootstrap-invoke) cl))
 
 (defn print-ast [compile-res]
   (clojure.pprint/pprint
@@ -110,4 +110,5 @@
         '((defn y ^long [^long x] (inc x)))))
 
 (print-ast r)
+
 
