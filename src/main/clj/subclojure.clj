@@ -34,8 +34,7 @@
  :var.static-fn/method-name "invokeStatic"
  :var.constant/field-name "var_x_value"}
 
-
-(defn my-pass
+(defn collect-vars-info
   {:pass-info {:walk :pre
                :depends #{#'clojure.tools.analyzer.passes.collect-closed-overs/collect-closed-overs}
                :state collect-vars-pass-state}}
@@ -65,12 +64,20 @@
                                 {:var/kind :var.kind/changed})))))))
   ast)
 
+(defn provide-invoke-static
+  {:pass-info {:walk :pre
+               :depends #{#'clojure.tools.analyzer.passes.collect-closed-overs/collect-closed-overs}}}
+  [ast]
+  (if (and (= (:op ast) :fn) (empty? (:closed-overs ast)))
+    (update ast :methods (fn [methods] (into [] (map #(assoc % :static? true)) methods)))
+    ast))
+
 (defn compile
   ([file] (compile file (clojure.lang.RT/makeClassLoader)))
   ([file cl]
-   (binding [a.jvm/run-passes (clojure.tools.analyzer.passes/schedule (-> e.jvm/passes
-                                                                          (conj #'my-pass)
-                                                                          #_(disj #'clojure.tools.emitter.passes.jvm.collect/collect)))
+   (binding [a.jvm/run-passes (clojure.tools.analyzer.passes/schedule (conj e.jvm/passes
+                                                                            #'collect-vars-info
+                                                                            #'provide-invoke-static))
              *vars* (atom {})]
      (let [analyze-opts {:bindings {Compiler/LOADER cl}}
            analyzed-forms (doall (map (fn [form]
@@ -93,7 +100,8 @@
         '((defn y ^long [^long x] (inc x)))))
 
 (def cl (doto (clojure.lang.RT/makeClassLoader)
-              (.addURL (.toURL (java.io.File. (System/getProperty "user.dir") "src/main/java")))))
+              (.addURL (.toURL (java.io.File. (System/getProperty "user.dir") "src/main/java")))
+              (.addURL (.toURL (java.io.File. (System/getProperty "user.dir") "classes")))))
 
 (require 'nsloader)
 
@@ -113,5 +121,3 @@
         '((defn y ^long [^long x] (inc x)))))
 
 (print-ast r)
-
-*e
