@@ -78,7 +78,8 @@
                                           (a.jvm/analyze+eval form (a.jvm/empty-env) analyze-opts))) file))
            init-fn `(^:once fn* [] ~@(map :expanded-form analyzed-forms))
 
-           classes (e.jvm.emit/emit-classes (a.jvm/analyze init-fn (a.jvm/empty-env) analyze-opts))
+           classes (binding [e.jvm.emit/*vars-info* {}]
+                     (e.jvm.emit/emit-classes (a.jvm/analyze init-fn (a.jvm/empty-env) analyze-opts)))
            r {:forms analyzed-forms
               :vars @*vars*
               :init-fn init-fn
@@ -92,7 +93,9 @@
         '((defn y ^long [^long x] (inc x)))))
 
 (def cl (doto (clojure.lang.RT/makeClassLoader)
-              (.addURL (.toURL (java.io.File. (System/getProperty "user.dir"))))))
+              (.addURL (.toURL (java.io.File. (System/getProperty "user.dir") "src/main/java")))))
+
+(require 'nsloader)
 
 (def loader-test
   (compile (list nsloader/bootstrap-invoke) cl))
@@ -111,4 +114,4 @@
 
 (print-ast r)
 
-
+*e
