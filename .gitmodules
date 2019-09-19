@@ -1,0 +1,12 @@
+[submodule "clojure"]
+	path = clojure
+	url = git@github.com:zajac/clojure.git
+[submodule "tools.emitter.jvm"]
+	path = tools.emitter.jvm
+	url = git@github.com:zajac/tools.emitter.jvm.git
+[submodule "tools.analyzer.jvm"]
+	path = tools.analyzer.jvm
+	url = git@github.com:zajac/tools.analyzer.jvm.git
+[submodule "tools.analyzer"]
+	path = tools.analyzer
+	url = git@github.com:zajac/tools.analyzer.git

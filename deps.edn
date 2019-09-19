@@ -1,0 +1,4 @@
+{:deps  {tools.emitter.jvm {:local/root "tools.emitter.jvm"}
+         org.clojure/clojure {:mvn/version "1.11.0-master-SNAPSHOT"}}
+ :aliases {:dev {:extra-deps {nrepl {:mvn/version "0.6.0"}}
+                 :jvm-opts ["-noverify"]}}}
