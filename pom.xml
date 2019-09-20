@@ -5,15 +5,36 @@
 		 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-	<!-- parent pom -->
+    <!-- parent pom -->
     <groupId>com.jetbrains.onair</groupId>
     <artifactId>subclojure</artifactId>
-    <packaging>pom</packaging>
     <version>0.3</version>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>8</source>
+                    <target>8</target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.clojure</groupId>
+            <artifactId>clojure</artifactId>
+            <version>1.11.0-master-SNAPSHOT</version>
+        </dependency>
+    </dependencies>
+
 
     <!-- sub modules -->
-    <modules>
-        <module>clojure</module>
-    </modules>
+<!--    <modules>-->
+<!--        <module>clojure</module>-->
+<!--    </modules>-->
+
 
 </project>

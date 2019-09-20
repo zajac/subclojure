@@ -48,17 +48,17 @@
 
           :else
           (do
-            (when (nil? subclojure.SampleNS/var_x_switchPoint)
-              (set! subclojure.SampleNS/var_x_switchPoint
+            (when (nil? subclojure.SampleNS/var_x_switch_point)
+              (set! subclojure.SampleNS/var_x_switch_point
                 (java.lang.invoke.SwitchPoint.)))
             (if (identical? subclojure.SampleNS/var_x_value subclojure.SampleNS/UNINITIALIZED_FN)
               (java.lang.invoke.ConstantCallSite.
-                (.guardWithTest subclojure.SampleNS/var_x_switchPoint
+                (.guardWithTest subclojure.SampleNS/var_x_switch_point
                                 (.findStatic caller subclojure.MyLambda "invokeStatic" methodType)
                                 subclojure.SampleNS/var_x_invoke_fallback_mh))
 
               (java.lang.invoke.ConstantCallSite.
-                (.guardWithTest subclojure.SampleNS/var_x_switchPoint
+                (.guardWithTest subclojure.SampleNS/var_x_switch_point
                                 (.bindTo
                                   (.findVirtual caller clojure.lang.IFn "invoke" methodType) subclojure.SampleNS/var_x_value)
                                 subclojure.SampleNS/var_x_invoke_fallback_mh))))))

@@ -14,7 +14,7 @@ public class SampleNS {
     public static Namespace ns;
 
     public static volatile Var var_x_var;
-    public static volatile SwitchPoint var_x_switchPoint;
+    public static volatile SwitchPoint var_x_switch_point;
     public static MethodHandle var_x_deref_mh;
     public static MethodHandle var_x_invoke_mh;
     public static volatile MethodHandle var_x_deref_fallback_mh;
@@ -43,13 +43,13 @@ public class SampleNS {
                     if (var_x_deref_mh != null) {
                         return new ConstantCallSite(var_x_deref_mh);
                     } else {
-                        if (var_x_switchPoint == null) {
-                            var_x_switchPoint = new SwitchPoint();
+                        if (var_x_switch_point == null) {
+                            var_x_switch_point = new SwitchPoint();
                         }
                         if (var_x_value == UNINITIALIZED_FN) {
                             var_x_value = new MyLambda();
                         }
-                        var_x_deref_mh = var_x_switchPoint.guardWithTest(MethodHandles.constant(Object.class, var_x_value), var_x_deref_fallback_mh);
+                        var_x_deref_mh = var_x_switch_point.guardWithTest(MethodHandles.constant(Object.class, var_x_value), var_x_deref_fallback_mh);
                         return new ConstantCallSite(var_x_deref_mh);
                     }
                 }
@@ -82,17 +82,17 @@ public class SampleNS {
                     if (var_x_invoke_mh != null) {
                         return new ConstantCallSite(var_x_invoke_mh);
                     } else {
-                        if (var_x_switchPoint == null) {
-                            var_x_switchPoint = new SwitchPoint();
+                        if (var_x_switch_point == null) {
+                            var_x_switch_point = new SwitchPoint();
                         }
 
                         if (var_x_value == UNINITIALIZED_FN) {
-                            var_x_invoke_mh = var_x_switchPoint.guardWithTest(
+                            var_x_invoke_mh = var_x_switch_point.guardWithTest(
                                     caller.findStatic(MyLambda.class, "invokeStatic", methodType),
                                     var_x_invoke_fallback_mh);
                             return new ConstantCallSite(var_x_invoke_mh);
                         } else {
-                            var_x_invoke_mh = var_x_switchPoint.guardWithTest(
+                            var_x_invoke_mh = var_x_switch_point.guardWithTest(
                                     caller.findVirtual(IFn.class, "invoke", methodType).bindTo(var_x_value),
                                     var_x_invoke_fallback_mh);
                             return new ConstantCallSite(var_x_invoke_mh);

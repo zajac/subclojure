@@ -1,5 +1,6 @@
 {:deps  {tools.emitter.jvm {:local/root "tools.emitter.jvm"}
-         org.clojure/clojure {:mvn/version "1.11.0-master-SNAPSHOT"}}
+         org.clojure/clojure {:mvn/version "1.11.0-master-SNAPSHOT"}
+         com.jetbrains.onair/subclojure {:mvn/version "0.3"}}
  :aliases {:dev {:extra-deps {nrepl {:mvn/version "0.6.0"}}
                  :jvm-opts ["-noverify"]}}
  :paths ["src/main/clj"]}

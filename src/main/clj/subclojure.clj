@@ -5,21 +5,8 @@
             [clojure.tools.emitter.jvm.emit :as e.jvm.emit]
             [clojure.pprint :refer [pprint]]
             [clojure.tools.analyzer.passes.collect-closed-overs]))
-*e
-(def file
-  '((ns emit-test)
 
-    (def x 12)
 
-    (prn x)
-
-    (defn foo []
-      (def bar 17))
-
-    (let [h 17]
-      (def hh (fn [] h)))
-
-    (defn bar [])))
 
 (def ^:dynamic *vars*)
 (defn collect-vars-pass-state []
@@ -57,7 +44,7 @@
                                       (nil? var-info))
                                 (if static-fn?
                                   {:var/kind :var.kind/static-fn
-                                   :var.static-fn/class-name (str (namespace var-sym) "$" (gensym (name var-sym)))
+                                   :var.static-fn/class-name (str (namespace var-sym) "$" (name var-sym))
                                    :var.static-fn/method-name "invokeStatic"}
                                   {:var/kind :var.kind/constant
                                    :var.constant/field-name (str "var_" (name var-sym) "_value")})
@@ -72,6 +59,33 @@
     (update ast :methods (fn [methods] (into [] (map #(assoc % :static? true)) methods)))
     ast))
 
+(defn generate-bootstrap-invoke [loader-class var-infos]
+  (let [method-name-sym (symbol "method_name")
+        caller-sym (symbol "caller")
+        method-type-sym (symbol "method-type")
+        var-name-sym (symbol "var-name")
+        namespace-field (symbol loader-class "namespace")]
+    `(fn [~caller-sym ~method-name-sym ~method-type-sym ~var-name-sym]
+      (cond
+        ~@(->> var-infos
+           (filter (fn [[var-sym info]] (= :var.kind/static-fn (:var/kind info))))
+           (mapcat
+            (fn [[var-sym var-info]]
+              (let [meta-field (symbol loader-class (name var-sym))]
+                `[(identical? ~var-name-sym ~(name var-sym))
+                  (do
+                    (when (nil? ~meta-field)
+                      (let [meta# (subclojure.Runtime$MetaVar.)]
+                        (set! (.-value meta#) subclojure.Runtime/UNINITIALIZED_FN)
+                        (set! ~meta-field meta#)))
+                    (subclojure.Runtime/bootstrapInvoke ~caller-sym
+                                                        ~method-type-sym
+                                                        ~meta-field
+                                                        ~namespace-field
+                                                        ~(name var-sym)
+                                                        ~(symbol (:var.static-fn/class-name var-info))))]))))
+        :else (throw (ex-info "not supported" {:var-name ~var-name-sym}))))))
+
 (defn compile
   ([file] (compile file (clojure.lang.RT/makeClassLoader)))
   ([file cl]
@@ -83,30 +97,51 @@
            analyzed-forms (doall (map (fn [form]
                                         (with-bindings (:bindings analyze-opts)
                                           (a.jvm/analyze+eval form (a.jvm/empty-env) analyze-opts))) file))
-           init-fn `(^:once fn* [] ~@(map :expanded-form analyzed-forms))
-
-           classes (binding [e.jvm.emit/*vars-info* {}]
-                     (e.jvm.emit/emit-classes (a.jvm/analyze init-fn (a.jvm/empty-env) analyze-opts)))
-           r {:forms analyzed-forms
-              :vars @*vars*
-              :init-fn init-fn
-              :bytecode classes}]
+           var-infos @*vars*
+           classes (binding [e.jvm.emit/*vars-info* var-infos]
+                     (let [init-fn `(^:once fn* [] ~@(map :expanded-form analyzed-forms))
+                           ast (a.jvm/analyze init-fn (a.jvm/empty-env) analyze-opts)]
+                       (e.jvm.emit/emit-classes (assoc ast :class-name "subclojure__init"))))
+           meta-var-fields (->> var-infos
+                                (map (fn [[var-sym var-info]]
+                                       {:op :field,
+                                        :attr #{:public :static},
+                                        :name (name var-sym),
+                                        :tag :subclojure.Runtime$MetaVar})))
+           loader-bc (-> (last classes)
+                         (update :fields concat meta-var-fields)
+                         (update :fields conj {:op :field
+                                               :attr #{:public :static}
+                                               :name "namespace"
+                                               :tag :clojure.lang.Namespace}))
+           classes (concat (butlast classes) [loader-bc])
+           bootstrap-form (generate-bootstrap-invoke (:name loader-bc) var-infos)
+           _ (binding [*compile-files* true]
+               (doseq [class classes]
+                 (e.jvm/compile-and-load class)))
+           bootstrap-bc (-> (a.jvm/analyze bootstrap-form (a.jvm/empty-env) analyze-opts)
+                            (assoc :class-name "subclojure__bootstrap__invoke")
+                            (e.jvm.emit/emit-classes)
+                            (first)
+                            (assoc :super java.lang.Object)
+                            (update :methods #(keep (fn [method]
+                                                      (cond
+                                                        (= (:method method) [[:<clinit>] :void]) method
+                                                        (= (:method method) [[:invokeStatic Object Object Object Object] Object])
+                                                        (assoc method :method [[:bootstrapInvoke
+                                                                                java.lang.invoke.MethodHandles$Lookup
+                                                                                java.lang.String
+                                                                                java.lang.invoke.MethodType
+                                                                                String]
+                                                                               java.lang.invoke.CallSite])))
+                                               %)))]
        (binding [*compile-files* true]
-         (doseq [class classes]
-           (e.jvm/compile-and-load class)))
-       r))))
-
-(def r (compile
-        '((defn y ^long [^long x] (inc x)))))
-
-(def cl (doto (clojure.lang.RT/makeClassLoader)
-              (.addURL (.toURL (java.io.File. (System/getProperty "user.dir") "src/main/java")))
-              (.addURL (.toURL (java.io.File. (System/getProperty "user.dir") "classes")))))
-
-(require 'nsloader)
-
-(def loader-test
-  (compile (list nsloader/bootstrap-invoke) cl))
+         (e.jvm/compile-and-load bootstrap-bc))
+       {:forms analyzed-forms
+        :vars var-infos
+        :bytecode classes
+        :loader-bc loader-bc
+        :bootstrap bootstrap-bc}))))
 
 (defn print-ast [compile-res]
   (clojure.pprint/pprint
@@ -117,7 +152,62 @@
         form))
     (:forms compile-res))))
 
+
+(comment
+  (def file
+  '((ns emit-test)
+
+    (def x 12)
+
+    (prn x)
+
+    (defn foo []
+      (def bar 17))
+
+    (let [h 17]
+      (def hh (fn [] h)))
+
+    (defn bar [])))
+
+
+  (def bootstrap-sample (emit-bootstrap-invoke "subclojure__init" "y" "subclojure$y"))
+
+  (def bootstrap-sample (emit-bootstrap-invoke "subclojure.SampleNS" "x" "subclojure.MyLambda"))
+
+
+(def cl (doto (clojure.lang.RT/makeClassLoader)
+              (.addURL (.toURL (java.io.File. (System/getProperty "user.dir") "src/main/java")))
+              (.addURL (.toURL (java.io.File. (System/getProperty "user.dir") "classes")))))
+
+  (def r (compile [bootstrap-sample] cl))
+*e
+(require 'nsloader)
+
+(def loader-test
+  (compile (list nsloader/bootstrap-invoke) cl))
+
 (def r (compile
-        '((defn y ^long [^long x] (inc x)))))
+        '((defn y ^long [^long x] (inc x))
+          (y 1))))
+*e
+
+  (pprint (:bootstrap r))
+
+  (pprint (:loader-bc r))
+
+  (pprint (:forms r))
+
+*e
+  (pprint (:bytecode r))
+
+(.invoke (.newInstance (Class/forName "subclojure__init" true cl)))
+
+  subclojure__init
+
+  ((.newInstance (Class/forName (:class-name (second (:bytecode r))) true cl)))
 
 (print-ast r)
+
+
+  )
+*e
