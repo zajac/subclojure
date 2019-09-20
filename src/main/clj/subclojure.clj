@@ -83,7 +83,7 @@
                                                         ~meta-field
                                                         ~namespace-field
                                                         ~(name var-sym)
-                                                        ~(symbol (:var.static-fn/class-name var-info))))]))))
+                                                        (Class/forName ~(:var.static-fn/class-name var-info))))]))))
         :else (throw (ex-info "not supported" {:var-name ~var-name-sym}))))))
 
 (defn compile
@@ -92,16 +92,18 @@
    (binding [a.jvm/run-passes (clojure.tools.analyzer.passes/schedule (conj e.jvm/passes
                                                                             #'collect-vars-info
                                                                             #'provide-invoke-static))
-             *vars* (atom {})]
+             *vars* (atom {})
+             clojure.tools.analyzer.passes.elide-meta/elides {:all #{:doc :file :line :added :column}}]
      (let [analyze-opts {:bindings {Compiler/LOADER cl}}
            analyzed-forms (doall (map (fn [form]
                                         (with-bindings (:bindings analyze-opts)
                                           (a.jvm/analyze+eval form (a.jvm/empty-env) analyze-opts))) file))
            var-infos @*vars*
+           init-fn `(^:once fn* [] ~@(map :expanded-form analyzed-forms))
+           init-ast (a.jvm/analyze init-fn (a.jvm/empty-env) analyze-opts)
+           root-ns (get-in init-ast [:env :ns])
            classes (binding [e.jvm.emit/*vars-info* var-infos]
-                     (let [init-fn `(^:once fn* [] ~@(map :expanded-form analyzed-forms))
-                           ast (a.jvm/analyze init-fn (a.jvm/empty-env) analyze-opts)]
-                       (e.jvm.emit/emit-classes (assoc ast :class-name "subclojure__init"))))
+                     (e.jvm.emit/emit-classes (assoc init-ast :class-name (e.jvm.emit/loader-class root-ns))))
            meta-var-fields (->> var-infos
                                 (map (fn [[var-sym var-info]]
                                        {:op :field,
@@ -120,7 +122,7 @@
                (doseq [class classes]
                  (e.jvm/compile-and-load class)))
            bootstrap-bc (-> (a.jvm/analyze bootstrap-form (a.jvm/empty-env) analyze-opts)
-                            (assoc :class-name "subclojure__bootstrap__invoke")
+                            (assoc :class-name (e.jvm.emit/bootstrap-invoke-class root-ns))
                             (e.jvm.emit/emit-classes)
                             (first)
                             (assoc :super java.lang.Object)
@@ -185,11 +187,15 @@
 
 (def loader-test
   (compile (list nsloader/bootstrap-invoke) cl))
+(pprint init-ast)
+
+
 
 (def r (compile
-        '((defn y ^long [^long x] (inc x))
+        '((ns fuck)
+          (defn y ^long [^long x] (inc x))
           (y 1))))
-*e
+
 
   (pprint (:bootstrap r))
 
@@ -202,12 +208,25 @@
 
 (.invoke (.newInstance (Class/forName "subclojure__init" true cl)))
 
+  (.invoke (.newInstance (Class/forName "fuck2__init" true cl)))
+
   subclojure__init
 
   ((.newInstance (Class/forName (:class-name (second (:bytecode r))) true cl)))
 
 (print-ast r)
 
+
+
+(def test-expr `((ns ~(symbol "fuck2"))
+                 ~@(map (fn [i] `(defn ~(symbol (str "fun" i)) [x# y# z#] y#)) (range 200))
+                 ~@(map (fn [i] `(~(symbol (str "fun" i)) 1 2 3)) (range 200))
+                 ))
+
+  (def t
+    (compile test-expr))
+
+(.invoke (.newInstance (Class/forName "fuck2__init" true cl)))
 
   )
 *e
